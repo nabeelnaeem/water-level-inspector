@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DEFAULT_CONFIG, TankConfig } from '@/constants/tankConfig';
+import { DEFAULT_CONFIG, AppConfig } from '@/constants/appConfig';
 
-const STORAGE_KEY = 'water_monitor_config_v1';
+const STORAGE_KEY = 'water_monitor_config_v2';
 
 interface ConfigContextValue {
-  config: TankConfig;
-  saveConfig: (next: TankConfig) => Promise<void>;
+  config: AppConfig;
+  saveConfig: (next: AppConfig) => Promise<void>;
   isLoaded: boolean;
 }
 
@@ -17,7 +17,7 @@ const ConfigContext = createContext<ConfigContextValue>({
 });
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
-  const [config, setConfig] = useState<TankConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoaded(true));
   }, []);
 
-  const saveConfig = useCallback(async (next: TankConfig) => {
+  const saveConfig = useCallback(async (next: AppConfig) => {
     setConfig(next);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }, []);

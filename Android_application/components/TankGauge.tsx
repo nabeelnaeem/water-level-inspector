@@ -1,10 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
-import { TankReading } from '@/hooks/useTankData';
+import { TankStatus } from '@/api/types';
 
 interface Props {
   label: string;
-  reading: TankReading;
+  percentage: number;
+  status: TankStatus;
+  /** Adjusted distance from sensor in cm, or null when not OK. */
+  distanceCm: number | null;
   accentColor: string;
   height?: number;
   width?: number;
@@ -16,9 +19,22 @@ function getLevelColor(pct: number): string {
   return '#00D4AA';
 }
 
+function statusText(status: TankStatus): string {
+  switch (status) {
+    case 'ok':
+      return 'Live';
+    case 'fault':
+      return 'Fault';
+    case 'offline':
+      return 'Offline';
+  }
+}
+
 export default function TankGauge({
   label,
-  reading,
+  percentage,
+  status,
+  distanceCm,
   accentColor,
   height = 240,
   width = 130,
@@ -27,8 +43,11 @@ export default function TankGauge({
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const waveAnim = useRef(new Animated.Value(0)).current;
 
-  const pct = reading.status === 'ok' ? reading.percentage : 0;
-  const fillColor = reading.status === 'offline' ? '#444' : getLevelColor(pct);
+  const isOk = status === 'ok';
+  const isDown = status === 'offline' || status === 'fault';
+  const pct = isOk ? percentage : 0;
+  const fillColor =
+    status === 'offline' ? '#444' : status === 'fault' ? '#FF8C00' : getLevelColor(pct);
 
   // Animate fill level change
   useEffect(() => {
@@ -52,9 +71,9 @@ export default function TankGauge({
     ).start();
   }, []);
 
-  // Pulse on offline
+  // Pulse when offline or faulted
   useEffect(() => {
-    if (reading.status === 'offline') {
+    if (isDown) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 0.4, duration: 600, useNativeDriver: true }),
@@ -64,7 +83,7 @@ export default function TankGauge({
     } else {
       pulseAnim.setValue(1);
     }
-  }, [reading.status]);
+  }, [isDown]);
 
   const fillHeight = fillAnim.interpolate({
     inputRange: [0, 1],
@@ -78,15 +97,15 @@ export default function TankGauge({
   });
 
   return (
-    <Animated.View style={[styles.wrapper, { opacity: reading.status === 'offline' ? pulseAnim : 1 }]}>
+    <Animated.View style={[styles.wrapper, { opacity: isDown ? pulseAnim : 1 }]}>
       {/* Label */}
       <Text style={[styles.label, { color: accentColor }]}>{label}</Text>
 
       {/* Status badge */}
-      <View style={[styles.badge, { backgroundColor: reading.status === 'offline' ? '#FF444430' : `${fillColor}25` }]}>
-        <View style={[styles.dot, { backgroundColor: reading.status === 'offline' ? '#FF4444' : fillColor }]} />
-        <Text style={[styles.badgeText, { color: reading.status === 'offline' ? '#FF4444' : fillColor }]}>
-          {reading.status === 'loading' ? 'Loading…' : reading.status === 'offline' ? 'Offline' : 'Live'}
+      <View style={[styles.badge, { backgroundColor: status === 'offline' ? '#FF444430' : `${fillColor}25` }]}>
+        <View style={[styles.dot, { backgroundColor: status === 'offline' ? '#FF4444' : fillColor }]} />
+        <Text style={[styles.badgeText, { color: status === 'offline' ? '#FF4444' : fillColor }]}>
+          {statusText(status)}
         </Text>
       </View>
 
@@ -116,14 +135,14 @@ export default function TankGauge({
       </View>
 
       {/* Percentage */}
-      <Text style={[styles.pctText, { color: reading.status === 'offline' ? '#666' : fillColor }]}>
-        {reading.status === 'ok' ? `${reading.percentage.toFixed(1)}%` : '--.--%'}
+      <Text style={[styles.pctText, { color: status === 'offline' ? '#666' : fillColor }]}>
+        {isOk ? `${percentage.toFixed(1)}%` : '--.--%'}
       </Text>
 
-      {/* Raw distance */}
-      {reading.status === 'ok' && (
+      {/* Distance */}
+      {isOk && distanceCm != null && (
         <Text style={styles.distText}>
-          {reading.rawDistance.toFixed(1)} cm from top
+          {distanceCm.toFixed(1)} cm from top
         </Text>
       )}
     </Animated.View>

@@ -1,50 +1,49 @@
-# Welcome to your Expo app 👋
+# Water Level Inspector — Mobile App (Expo / React Native)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Mobile dashboard for the Smart Water Level Inspector. **Refactored** to consume
+the shared [backend](../backend) JSON API (REST + WebSocket) — the same contract
+the [web dashboard](../web-dashboard) uses — instead of polling sensors directly.
 
-## Get started
+## What changed (v1 → v2)
 
-1. Install dependencies
+| Before | After |
+|---|---|
+| Polled each ESP8266 sensor's raw-float endpoint directly | Talks to the backend over REST + live **WebSocket** |
+| Re-implemented tank math on-device | Backend is the single source of truth |
+| Per-sensor IP config | Single **backend URL** in Settings |
+| Two hard-coded tanks | **Multi-tank**, auto-discovered from the backend |
+| No history | Per-tank 24h **history sparkline** |
+| Dead sensor → showed "100% full" | Surfaces a **fault** state |
 
-   ```bash
-   npm install
-   ```
+## Architecture
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+api/        types.ts  client.ts            # data contract + REST/WS client
+hooks/      useTanks.ts  useHistory.ts      # live data (WS + polling fallback)
+context/    ConfigContext.tsx               # backend URL + refresh (AsyncStorage)
+constants/  appConfig.ts                    # defaults
+components/  TankGauge.tsx  HistorySparkline.tsx
+app/(tabs)/  index.tsx (Dashboard)  explore.tsx (Settings)
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+- **Live updates:** `useTanks` opens one WebSocket (`/ws`) with auto-reconnect
+  and patches state as readings arrive; REST polling is a fallback.
+- **Reused** from v1: `TankGauge` (animated gauge), `ConfigContext`, the dark UI.
+- **Removed:** the unused Expo starter template (themed-text/view, parallax,
+  collapsible, etc.), `useStoredConfig`, and the old direct-polling `useTankData`.
 
-## Learn more
+## Run
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+cd Android_application
+npm install
+npx expo start          # scan the QR with Expo Go
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Open **Settings**, set the **Backend URL** to your LAN host (e.g.
+`http://192.168.1.50:4000`), tap **Test connection**, then **Save**.
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+> Per `AGENTS.md`, this project pins to **Expo SDK 54** — check the versioned
+> docs at https://docs.expo.dev/versions/v54.0.0/ before adding native modules.
+> The refactor intentionally uses only built-ins already present in SDK 54
+> (`fetch`, `WebSocket`, `AsyncStorage`, `expo-router`) — no new native deps.

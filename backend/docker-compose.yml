@@ -1,0 +1,19 @@
+services:
+  water-backend:
+    build: .
+    container_name: water-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: "4000"
+      HOST: "0.0.0.0"
+      DB_PATH: "/app/data/water.db"
+      OFFLINE_TIMEOUT_SECONDS: "90"
+      HISTORY_RETENTION_DAYS: "90"
+      # INGEST_KEY: "change-me"   # uncomment to require the node to authenticate
+    volumes:
+      - water-data:/app/data
+
+volumes:
+  water-data:

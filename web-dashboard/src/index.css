@@ -1,0 +1,241 @@
+:root {
+  --accent: #00d4aa;
+  --radius: 16px;
+  --maxw: 1100px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Dark theme (default) ---- */
+[data-theme="dark"] {
+  --bg: #060e18;
+  --bg-elev: #0d1e2e;
+  --bg-elev-2: #0a1828;
+  --border: #1a3048;
+  --text: #e2f0ff;
+  --text-dim: #8aaec8;
+  --text-faint: #4a6a88;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* ---- Light theme ---- */
+[data-theme="light"] {
+  --bg: #eef3f8;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #f3f7fb;
+  --border: #d7e1ec;
+  --text: #0e1c2a;
+  --text-dim: #45637e;
+  --text-faint: #7d97ad;
+  --shadow: 0 6px 20px rgba(20, 50, 80, 0.10);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.container {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* ---- App shell / nav ---- */
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.appbar-inner {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.brand {
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.nav a {
+  color: var(--text-dim);
+  padding: 7px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.nav a.active {
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+}
+
+/* ---- Cards / grid ---- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+}
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* ---- Misc utilities ---- */
+.row {
+  display: flex;
+  align-items: center;
+}
+.muted {
+  color: var(--text-faint);
+}
+.dim {
+  color: var(--text-dim);
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-btn:hover {
+  color: var(--text);
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  margin-bottom: 16px;
+  border: 1px solid;
+}
+.banner.warn {
+  color: #ff8c00;
+  border-color: #ff8c0040;
+  background: #ff8c0012;
+}
+.banner.err {
+  color: #ff4d4f;
+  border-color: #ff4d4f40;
+  background: #ff4d4f12;
+}
+
+/* ---- Forms ---- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.field label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-faint);
+}
+.field input {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 15px;
+}
+.field .hint {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.btn {
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 11px 16px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn.primary {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent);
+}
+.btn.danger {
+  color: #ff4d4f;
+  border-color: #ff4d4f40;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 170, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(0, 212, 170, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 170, 0);
+  }
+}

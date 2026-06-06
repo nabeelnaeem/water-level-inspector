@@ -1,6 +1,45 @@
 # Smart Water Level Inspector 🚰💧
 
-An open-source DIY dual-tank water level monitoring system designed for homes. The project measures water levels in two separate tanks—an **Underground Tank (UG)** and a **Roof Tank**—using waterproof ultrasonic sensors, coordinates data via a central ESP8266 Master node, displays live states on an I2C LCD with LED alarm indicators, and broadcasts data to a modern React Native (Expo) Android mobile dashboard.
+An open-source DIY water level monitoring system for homes. It measures tank
+levels with waterproof ultrasonic sensors and shows them live on a web
+dashboard and a React Native mobile app.
+
+---
+
+## 🆕 v2 Architecture (ESP32-S3 + Backend + Web)
+
+The project has migrated from the original **3× ESP8266** design (2 Slaves + 1
+LCD/LED Master) to a centralised, scalable architecture:
+
+```
+ESP32-S3 tank node ──POST JSON──▶ Self-hosted backend (REST + WebSocket + SQLite)
+                                      │
+                          ┌───────────┴───────────┐
+                          ▼                         ▼
+                   Web dashboard            React Native app
+                  (React + Vite)               (Expo SDK 54)
+```
+
+| Component | Folder | Stack |
+|---|---|---|
+| **Backend** (single source of truth, history, live push) | [`backend/`](backend) | Node · Express · SQLite · WebSocket |
+| **Web dashboard** (light/dark, charts, multi-tank) | [`web-dashboard/`](web-dashboard) | React · Vite · TanStack Query · Recharts |
+| **Mobile app** (refactored onto the API) | [`Android_application/`](Android_application) | Expo · React Native |
+| **Firmware** (ESP32-S3 tank node) | [`ESP32S3_sketches/`](ESP32S3_sketches) | Arduino C++ (ESP32 core) |
+
+**Why v2:** centralised history + multi-tank + online/offline detection, a clean
+JSON contract shared by web and mobile, OTA firmware updates, and a fix for the
+original "dead sensor reads 100% full" safety bug (the node now reports a
+**fault** instead). The LCD/LED Master node is **retired** — the dashboard
+replaces it.
+
+**Quick start:** run the [backend](backend), open the
+[web dashboard](web-dashboard), flash the [ESP32-S3 node](ESP32S3_sketches),
+then point the [mobile app](Android_application) at the backend URL.
+
+> The sections below document the **original ESP8266 system** and the hardware
+> wiring / calibration concepts, which remain a useful reference. The ESP8266
+> sketches are deprecated — see [`ESP8266_sketches/DEPRECATED.md`](ESP8266_sketches/DEPRECATED.md).
 
 ---
 

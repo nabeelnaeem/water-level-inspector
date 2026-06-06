@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import TankGauge from '@/components/TankGauge';
-import { useTankData } from '@/hooks/useTankData';
+import HistorySparkline from '@/components/HistorySparkline';
+import { useTanks } from '@/hooks/useTanks';
 import { useConfig } from '@/context/ConfigContext';
+import { TankState } from '@/api/types';
+
+const ACCENTS = ['#38BDF8', '#A78BFA', '#34D399', '#F472B6', '#FBBF24'];
 
 function formatTime(date: Date | null): string {
   if (!date) return 'Never';
@@ -23,12 +27,11 @@ function formatTime(date: Date | null): string {
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const { config } = useConfig();
-  const [tankData, refresh] = useTankData(config);
+  const [data, refresh] = useTanks(config.backendUrl, config.refreshInterval);
 
-  const onRefresh = useCallback(() => {
-    refresh();
-  }, [refresh]);
+  const onRefresh = useCallback(() => refresh(), [refresh]);
 
+  const sorted = [...data.tanks].sort((a, b) => a.config.sortOrder - b.config.sortOrder);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -38,7 +41,7 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl
-            refreshing={tankData.isRefreshing}
+            refreshing={data.isRefreshing}
             onRefresh={onRefresh}
             tintColor="#00D4AA"
             colors={['#00D4AA']}
@@ -53,78 +56,56 @@ export default function DashboardScreen() {
             <Text style={styles.headerSub}>Home Tank Monitor</Text>
           </View>
           <TouchableOpacity
-            style={[styles.refreshBtn, tankData.isRefreshing && styles.refreshBtnActive]}
+            style={[styles.refreshBtn, data.isRefreshing && styles.refreshBtnActive]}
             onPress={refresh}
-            disabled={tankData.isRefreshing}
+            disabled={data.isRefreshing}
             accessibilityLabel="Refresh tank data"
           >
             <Ionicons
-              name={tankData.isRefreshing ? 'sync' : 'refresh'}
+              name={data.isRefreshing ? 'sync' : 'refresh'}
               size={20}
-              color={tankData.isRefreshing ? '#00D4AA' : '#8AAEC8'}
+              color={data.isRefreshing ? '#00D4AA' : '#8AAEC8'}
             />
           </TouchableOpacity>
         </View>
 
-        {/* Last updated bar */}
+        {/* Status bar */}
         <View style={styles.updateBar}>
           <Ionicons name="time-outline" size={13} color="#3A5068" />
-          <Text style={styles.updateText}>
-            Updated: {formatTime(tankData.lastUpdated)}
-          </Text>
+          <Text style={styles.updateText}>Updated: {formatTime(data.lastUpdated)}</Text>
           <View style={styles.updateBarRight}>
-            <View style={[styles.autoRefreshDot, { backgroundColor: '#00D4AA' }]} />
-            <Text style={styles.autoRefreshText}>
-              Auto {config.refreshInterval / 1000}s
-            </Text>
+            <View
+              style={[
+                styles.autoRefreshDot,
+                { backgroundColor: data.connected ? '#00D4AA' : '#FF8C00' },
+              ]}
+            />
+            <Text style={styles.autoRefreshText}>{data.connected ? 'Live' : 'Reconnecting'}</Text>
           </View>
         </View>
 
         {/* Error banner */}
-        {tankData.error && (
+        {data.error && (
           <View style={styles.errorBanner}>
             <Ionicons name="warning-outline" size={16} color="#FF4444" />
-            <Text style={styles.errorText}>{tankData.error}</Text>
+            <Text style={styles.errorText}>{data.error}</Text>
           </View>
         )}
 
-        {/* Gauges */}
-        <View style={styles.gaugeRow}>
-          <TankGauge
-            label={config.tank1Label}
-            reading={tankData.tank1}
-            accentColor="#38BDF8"
-            height={260}
-            width={140}
-          />
-          <TankGauge
-            label={config.tank2Label}
-            reading={tankData.tank2}
-            accentColor="#A78BFA"
-            height={260}
-            width={140}
-          />
-        </View>
+        {/* Empty states */}
+        {!data.error && !data.isLoading && sorted.length === 0 && (
+          <View style={styles.errorBanner}>
+            <Ionicons name="information-circle-outline" size={16} color="#FF8C00" />
+            <Text style={[styles.errorText, { color: '#FF8C00' }]}>
+              No tanks configured. Add one in the web dashboard, then a node with a matching ID.
+            </Text>
+          </View>
+        )}
 
-        {/* Detail cards */}
-        <View style={styles.detailGrid}>
-          <DetailCard
-            label={config.tank1Label}
-            pct={tankData.tank1.status === 'ok' ? tankData.tank1.percentage : null}
-            dist={tankData.tank1.status === 'ok' ? tankData.tank1.rawDistance : null}
-            height={config.tank1Height}
-            color="#38BDF8"
-            status={tankData.tank1.status}
-          />
-          <DetailCard
-            label={config.tank2Label}
-            pct={tankData.tank2.status === 'ok' ? tankData.tank2.percentage : null}
-            dist={tankData.tank2.status === 'ok' ? tankData.tank2.rawDistance : null}
-            height={config.tank2Height}
-            color="#A78BFA"
-            status={tankData.tank2.status}
-          />
-        </View>
+        {/* Tanks */}
+        {sorted.map((tank, i) => (
+          <TankBlock key={tank.config.id} tank={tank} accent={ACCENTS[i % ACCENTS.length]} />
+        ))}
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -132,65 +113,82 @@ export default function DashboardScreen() {
   );
 }
 
-interface DetailCardProps {
-  label: string;
-  pct: number | null;
-  dist: number | null;
-  height: number;
-  color: string;
-  status: string;
-}
+function TankBlock({ tank, accent }: { tank: TankState; accent: string }) {
+  const [showHistory, setShowHistory] = useState(false);
+  const { config, latest, status } = tank;
+  const ok = status === 'ok';
+  const pct = ok && latest ? latest.percentage : 0;
+  const dist = ok && latest ? latest.adjustedDistanceCm : null;
+  const waterHeight = ok && latest ? latest.waterHeightCm : null;
 
-function DetailCard({ label, pct, dist, height, color, status }: DetailCardProps) {
-  const waterHeight = pct !== null && dist !== null ? height - dist : null;
   return (
-    <View style={[styles.detailCard, { borderTopColor: color }]}>
-      <Text style={[styles.detailLabel, { color }]}>{label}</Text>
-      <View style={styles.detailRow}>
-        <Ionicons name="water" size={14} color={color} />
-        <Text style={styles.detailKey}>Water height</Text>
-        <Text style={styles.detailValue}>
-          {waterHeight !== null ? `${waterHeight.toFixed(1)} cm` : 'N/A'}
-        </Text>
+    <View style={styles.tankBlock}>
+      <View style={styles.gaugeRow}>
+        <TankGauge
+          label={config.label}
+          percentage={pct}
+          status={status}
+          distanceCm={dist}
+          accentColor={accent}
+          height={240}
+          width={150}
+        />
       </View>
-      <View style={styles.detailRow}>
-        <Ionicons name="arrow-down" size={14} color="#5A7A99" />
-        <Text style={styles.detailKey}>Dist from top</Text>
-        <Text style={styles.detailValue}>{dist !== null ? `${dist.toFixed(1)} cm` : 'N/A'}</Text>
-      </View>
-      <View style={styles.detailRow}>
-        <Ionicons name="resize-outline" size={14} color="#5A7A99" />
-        <Text style={styles.detailKey}>Tank height</Text>
-        <Text style={styles.detailValue}>{height} cm</Text>
-      </View>
-      <View
-        style={[
-          styles.statusPill,
-          { backgroundColor: status === 'offline' ? '#FF444420' : `${color}20` },
-        ]}
-      >
-        <Text
-          style={[
-            styles.statusPillText,
-            { color: status === 'offline' ? '#FF4444' : color },
-          ]}
-        >
-          {status.charAt(0).toUpperCase() + status.slice(1)}
-        </Text>
+
+      <View style={[styles.detailCard, { borderTopColor: accent }]}>
+        <DetailRow icon="water" color={accent} label="Water height"
+          value={waterHeight != null ? `${waterHeight.toFixed(1)} cm` : 'N/A'} />
+        <DetailRow icon="arrow-down" color="#5A7A99" label="Dist from top"
+          value={dist != null ? `${dist.toFixed(1)} cm` : 'N/A'} />
+        <DetailRow icon="resize-outline" color="#5A7A99" label="Tank height"
+          value={`${config.heightCm} cm`} />
+        {latest?.volumeLiters != null && ok && (
+          <DetailRow icon="beaker-outline" color="#5A7A99" label="Volume"
+            value={`${latest.volumeLiters} L`} />
+        )}
+        {latest?.rssi != null && ok && (
+          <DetailRow icon="wifi" color="#5A7A99" label="Signal" value={`${latest.rssi} dBm`} />
+        )}
+
+        <TouchableOpacity style={styles.historyToggle} onPress={() => setShowHistory((s) => !s)}>
+          <Text style={[styles.historyToggleText, { color: accent }]}>
+            {showHistory ? 'Hide history ▲' : 'Show history ▼'}
+          </Text>
+        </TouchableOpacity>
+
+        {showHistory && (
+          <View style={styles.historyWrap}>
+            <HistorySparkline tankId={config.id} hours={24} accentColor={accent} />
+          </View>
+        )}
       </View>
     </View>
   );
 }
 
+function DetailRow({
+  icon,
+  color,
+  label,
+  value,
+}: {
+  icon: any;
+  color: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.detailRow}>
+      <Ionicons name={icon} size={14} color={color} />
+      <Text style={styles.detailKey}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#060E18',
-  },
-  scroll: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
+  root: { flex: 1, backgroundColor: '#060E18' },
+  scroll: { paddingHorizontal: 20, paddingBottom: 20 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -198,18 +196,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 12,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#E2F0FF',
-    letterSpacing: -0.5,
-  },
-  headerSub: {
-    fontSize: 13,
-    color: '#4A6A88',
-    fontWeight: '500',
-    marginTop: 2,
-  },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: '#E2F0FF', letterSpacing: -0.5 },
+  headerSub: { fontSize: 13, color: '#4A6A88', fontWeight: '500', marginTop: 2 },
   refreshBtn: {
     width: 42,
     height: 42,
@@ -220,35 +208,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  refreshBtnActive: {
-    borderColor: '#00D4AA40',
-    backgroundColor: '#00D4AA10',
-  },
-  updateBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 14,
-  },
-  updateText: {
-    fontSize: 12,
-    color: '#3A5068',
-    flex: 1,
-  },
-  updateBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  autoRefreshDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  autoRefreshText: {
-    fontSize: 11,
-    color: '#3A5068',
-  },
+  refreshBtnActive: { borderColor: '#00D4AA40', backgroundColor: '#00D4AA10' },
+  updateBar: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 14 },
+  updateText: { fontSize: 12, color: '#3A5068', flex: 1 },
+  updateBarRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  autoRefreshDot: { width: 5, height: 5, borderRadius: 2.5 },
+  autoRefreshText: { fontSize: 11, color: '#3A5068' },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -261,21 +226,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 14,
   },
-  errorText: {
-    color: '#FF4444',
-    fontSize: 13,
-    flex: 1,
-  },
-  gaugeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    marginBottom: 28,
-    gap: 12,
-  },
-  detailGrid: {
-    gap: 12,
-  },
+  errorText: { color: '#FF4444', fontSize: 13, flex: 1 },
+  tankBlock: { marginBottom: 24 },
+  gaugeRow: { alignItems: 'center', marginBottom: 16 },
   detailCard: {
     backgroundColor: '#0D1E2E',
     borderRadius: 16,
@@ -285,37 +238,15 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
   },
-  detailLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    marginBottom: 4,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  detailKey: {
-    color: '#4A6A88',
-    fontSize: 13,
-    flex: 1,
-  },
-  detailValue: {
-    color: '#C0D8F0',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  statusPill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
-    marginTop: 4,
-  },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.4,
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  detailKey: { color: '#4A6A88', fontSize: 13, flex: 1 },
+  detailValue: { color: '#C0D8F0', fontSize: 13, fontWeight: '600' },
+  historyToggle: { marginTop: 6, paddingVertical: 6 },
+  historyToggleText: { fontSize: 13, fontWeight: '700' },
+  historyWrap: {
+    marginTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#1A3048',
+    paddingTop: 14,
   },
 });
