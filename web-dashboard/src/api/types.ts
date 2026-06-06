@@ -41,7 +41,7 @@ export interface HistoryPoint {
 
 export interface HistoryResponse {
   tankId: string;
-  hours: number;
+  minutes: number;
   points: HistoryPoint[];
 }
 

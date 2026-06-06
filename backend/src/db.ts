@@ -46,9 +46,9 @@ db.exec(`
 /** Prune readings older than the retention window. No-op when retention = 0. */
 export function pruneOldReadings(): number {
   if (config.historyRetentionDays <= 0) return 0;
-  const stmt = db.prepare(
-    `DELETE FROM readings WHERE ts < datetime('now', ?)`,
-  );
-  const res = stmt.run(`-${config.historyRetentionDays} days`);
+  // ISO cutoff computed in JS so it lexicographically matches stored ISO `ts`
+  // (SQLite's datetime('now') uses a space separator and would mis-compare).
+  const cutoff = new Date(Date.now() - config.historyRetentionDays * 86_400_000).toISOString();
+  const res = db.prepare(`DELETE FROM readings WHERE ts < ?`).run(cutoff);
   return res.changes;
 }

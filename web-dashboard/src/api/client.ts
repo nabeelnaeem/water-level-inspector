@@ -30,8 +30,17 @@ export const api = {
 
   getTank: (id: string) => getJson<TankState>(`/api/tanks/${encodeURIComponent(id)}`),
 
-  history: (id: string, hours: number) =>
-    getJson<HistoryResponse>(`/api/tanks/${encodeURIComponent(id)}/history?hours=${hours}`),
+  history: (id: string, minutes: number) =>
+    getJson<HistoryResponse>(`/api/tanks/${encodeURIComponent(id)}/history?minutes=${minutes}`),
+
+  // Ask the node to take a fresh reading now (served within the node's
+  // command-poll interval, ~3s).
+  refreshTank: async (id: string): Promise<void> => {
+    const res = await fetch(`${apiBase()}/api/tanks/${encodeURIComponent(id)}/refresh`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(`Refresh failed: HTTP ${res.status}`);
+  },
 
   saveTank: async (cfg: {
     id: string;

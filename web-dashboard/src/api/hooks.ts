@@ -17,11 +17,12 @@ export function useTanks() {
   });
 }
 
-export function useHistory(tankId: string, hours: number) {
+export function useHistory(tankId: string, minutes: number) {
   return useQuery({
-    queryKey: ['history', tankId, hours],
-    queryFn: () => api.history(tankId, hours),
-    refetchInterval: 60_000,
+    queryKey: ['history', tankId, minutes],
+    queryFn: () => api.history(tankId, minutes),
+    // Refresh fine-grained views quickly, coarse ones less often.
+    refetchInterval: minutes <= 360 ? 15_000 : 60_000,
   });
 }
 
@@ -39,6 +40,11 @@ export function useDeleteTank() {
     mutationFn: api.deleteTank,
     onSuccess: () => qc.invalidateQueries({ queryKey: TANKS_KEY }),
   });
+}
+
+export function useRefreshTank() {
+  // The fresh reading arrives via the WebSocket stream, so no cache work here.
+  return useMutation({ mutationFn: api.refreshTank });
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   deleteTank,
   history,
 } from '../repository.js';
+import { requestRefresh, consumeRefresh } from '../commands.js';
 
 export const tanksRouter = Router();
 
@@ -24,13 +25,40 @@ tanksRouter.get('/:id', (req, res) => {
   res.json(tankState(tank));
 });
 
-// GET /api/tanks/:id/history?hours=24 — downsampled time-series.
+// GET /api/tanks/:id/history?minutes=60  (or ?hours=24) — time-series.
+// Accepts a window in minutes (preferred) or hours (back-compat). Short
+// windows return every reading; very long windows are downsampled.
 tanksRouter.get('/:id/history', (req, res) => {
   const tank = getTank(req.params.id);
   if (!tank) return res.status(404).json({ error: 'tank_not_found' });
 
-  const hours = Math.min(Math.max(Number(req.query.hours) || 24, 1), 24 * 30);
-  res.json({ tankId: tank.id, hours, points: history(tank.id, hours) });
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  const MAX_MINUTES = 60 * 24 * 90; // 90 days
+
+  let minutes: number;
+  if (req.query.minutes != null) minutes = Number(req.query.minutes);
+  else if (req.query.hours != null) minutes = Number(req.query.hours) * 60;
+  else minutes = 60;
+  minutes = clamp(Number.isFinite(minutes) ? minutes : 60, 1, MAX_MINUTES);
+
+  const maxPoints = clamp(Number(req.query.maxPoints) || 3000, 50, 5000);
+
+  res.json({ tankId: tank.id, minutes, points: history(tank.id, minutes, maxPoints) });
+});
+
+// POST /api/tanks/:id/refresh — ask the node to take a fresh reading now.
+// Called by the dashboard/app "Refresh now" button.
+tanksRouter.post('/:id/refresh', (req, res) => {
+  const tank = getTank(req.params.id);
+  if (!tank) return res.status(404).json({ error: 'tank_not_found' });
+  requestRefresh(tank.id);
+  res.json({ ok: true, requested: tank.id });
+});
+
+// GET /api/tanks/:id/command — polled by the node. Returns (and clears)
+// whether a manual refresh was requested. Kept tiny on purpose.
+tanksRouter.get('/:id/command', (req, res) => {
+  res.json({ refresh: consumeRefresh(req.params.id) });
 });
 
 const tankSchema = z.object({

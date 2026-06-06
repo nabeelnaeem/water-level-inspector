@@ -3,7 +3,8 @@
 
 export const DEFAULT_CONFIG = {
   // Base URL of the self-hosted backend (LAN IP + port).
-  backendUrl: 'http://192.168.1.50:4000',
+  // Change this in the app's Settings screen to match your backend host.
+  backendUrl: 'http://192.168.1.18:4000',
 
   // Fallback poll interval in ms (live updates arrive over WebSocket; this is
   // a safety net if the socket drops).

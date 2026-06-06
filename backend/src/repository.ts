@@ -159,16 +159,24 @@ export interface HistoryPoint {
   fault: boolean;
 }
 
-/** Return downsampled history for a tank over the last `hours`. */
-export function history(tankId: string, hours: number, maxPoints = 500): HistoryPoint[] {
+/**
+ * Return history for a tank over the last `minutes`. Points are returned at
+ * full resolution up to `maxPoints`; only beyond that are they evenly
+ * downsampled (so short, granular windows show every reading).
+ */
+export function history(tankId: string, minutes: number, maxPoints = 3000): HistoryPoint[] {
+  // Compare against an ISO cutoff computed in JS. Stored `ts` values are
+  // ISO strings (…Z), so lexicographic comparison is correct — whereas
+  // SQLite's datetime('now') uses a space separator and would mis-compare.
+  const cutoff = new Date(Date.now() - minutes * 60_000).toISOString();
   const rows = db
     .prepare(
       `SELECT raw_distance_cm, water_height_cm, percentage, fault, ts
          FROM readings
-        WHERE tank_id = ? AND ts >= datetime('now', ?)
+        WHERE tank_id = ? AND ts >= ?
         ORDER BY ts ASC`,
     )
-    .all(tankId, `-${hours} hours`) as ReadingRow[];
+    .all(tankId, cutoff) as ReadingRow[];
 
   // Even downsample to keep charts light without a window function.
   const step = Math.max(1, Math.ceil(rows.length / maxPoints));

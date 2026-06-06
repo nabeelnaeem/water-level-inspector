@@ -15,6 +15,7 @@ import TankGauge from '@/components/TankGauge';
 import HistorySparkline from '@/components/HistorySparkline';
 import { useTanks } from '@/hooks/useTanks';
 import { useConfig } from '@/context/ConfigContext';
+import { api } from '@/api/client';
 import { TankState } from '@/api/types';
 
 const ACCENTS = ['#38BDF8', '#A78BFA', '#34D399', '#F472B6', '#FBBF24'];
@@ -29,7 +30,14 @@ export default function DashboardScreen() {
   const { config } = useConfig();
   const [data, refresh] = useTanks(config.backendUrl, config.refreshInterval);
 
-  const onRefresh = useCallback(() => refresh(), [refresh]);
+  // Ask every node for a fresh reading, then re-pull the snapshot. The new
+  // readings also stream in over the WebSocket within a few seconds.
+  const onRefresh = useCallback(() => {
+    data.tanks.forEach((t) =>
+      api.refreshTank(config.backendUrl, t.config.id).catch(() => {}),
+    );
+    refresh();
+  }, [data.tanks, config.backendUrl, refresh]);
 
   const sorted = [...data.tanks].sort((a, b) => a.config.sortOrder - b.config.sortOrder);
 
@@ -57,7 +65,7 @@ export default function DashboardScreen() {
           </View>
           <TouchableOpacity
             style={[styles.refreshBtn, data.isRefreshing && styles.refreshBtnActive]}
-            onPress={refresh}
+            onPress={onRefresh}
             disabled={data.isRefreshing}
             accessibilityLabel="Refresh tank data"
           >

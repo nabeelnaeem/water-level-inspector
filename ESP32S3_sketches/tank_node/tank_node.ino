@@ -41,9 +41,15 @@
 static const char* NODE_ID = "tank-1";
 static const char* FW_VERSION = "1.0.0";
 
-// How often to sample + report (ms). Keep the backend's
-// OFFLINE_TIMEOUT_SECONDS at roughly 3x this interval.
-static const unsigned long REPORT_INTERVAL_MS = 1000;
+// How often to sample + report on the regular schedule (ms).
+// NOTE: if you raise this above ~60s, also raise the backend's
+// OFFLINE_TIMEOUT_SECONDS so the tank isn't shown offline between posts.
+static const unsigned long REPORT_INTERVAL_MS = 120000;  // 2 minutes
+
+// How often to ask the backend whether a manual refresh was requested (ms).
+// This is a tiny GET, so it can be frequent without much cost. A dashboard
+// "Refresh now" press will be served within this interval.
+static const unsigned long COMMAND_POLL_INTERVAL_MS = 3000;
 
 // ----------------------------------------------------------------------------
 // Pins
@@ -65,6 +71,10 @@ static const int   SAMPLE_COUNT = 5;       // median-of-N
 // State
 // ----------------------------------------------------------------------------
 unsigned long lastReport = 0;
+unsigned long lastCommandPoll = 0;
+// Command endpoint, derived from BACKEND_INGEST_URL at startup
+// (e.g. http://host:4000/api/ingest  ->  http://host:4000/api/tanks/<id>/command).
+String commandUrl;
 
 // ----------------------------------------------------------------------------
 // Wi-Fi
@@ -189,6 +199,28 @@ void reportReading(float distanceCm) {
   http.end();
 }
 
+// Ask the backend whether a manual refresh was requested. Returns true if so.
+// Tiny GET; the backend clears the flag when we read it.
+bool manualRefreshRequested() {
+  if (WiFi.status() != WL_CONNECTED || commandUrl.length() == 0) return false;
+
+  WiFiClient client;
+  HTTPClient http;
+  http.begin(client, commandUrl);
+#ifdef INGEST_KEY
+  http.addHeader("x-ingest-key", INGEST_KEY);
+#endif
+
+  bool refresh = false;
+  int code = http.GET();
+  if (code == 200) {
+    // Response is small: {"refresh":true} or {"refresh":false}.
+    refresh = http.getString().indexOf("true") >= 0;
+  }
+  http.end();
+  return refresh;
+}
+
 // ----------------------------------------------------------------------------
 // Arduino lifecycle
 // ----------------------------------------------------------------------------
@@ -202,6 +234,13 @@ void setup() {
   pinMode(STATUS_LED, OUTPUT);
   digitalWrite(TRIG_PIN, LOW);
   digitalWrite(STATUS_LED, LOW);
+
+  // Derive the command URL from the ingest URL: replace the trailing
+  // "/api/ingest" with "/api/tanks/<NODE_ID>/command".
+  commandUrl = String(BACKEND_INGEST_URL);
+  int apiIdx = commandUrl.indexOf("/api/ingest");
+  if (apiIdx >= 0) commandUrl = commandUrl.substring(0, apiIdx);
+  commandUrl += "/api/tanks/" + String(NODE_ID) + "/command";
 
   connectWiFi();
   setupOTA();
@@ -218,6 +257,19 @@ void loop() {
     connectWiFi();
   }
 
+  // Manual-refresh check: poll the backend's command flag frequently.
+  if (millis() - lastCommandPoll >= COMMAND_POLL_INTERVAL_MS) {
+    lastCommandPoll = millis();
+    if (manualRefreshRequested()) {
+      Serial.println("[Manual refresh requested]");
+      float d = readDistanceCm();
+      Serial.printf("Distance: %.2f cm\n", d);
+      reportReading(d);
+      lastReport = millis();  // reset the regular timer
+    }
+  }
+
+  // Regular scheduled report.
   if (millis() - lastReport >= REPORT_INTERVAL_MS) {
     float d = readDistanceCm();
     Serial.printf("Distance: %.2f cm\n", d);

@@ -30,4 +30,14 @@ export const api = {
       `/api/tanks/${encodeURIComponent(tankId)}/history?hours=${hours}`,
       signal,
     ),
+
+  // Ask a node to take a fresh reading now (served within its command-poll
+  // interval, ~3s). The result arrives via the normal WebSocket stream.
+  refreshTank: async (baseUrl: string, tankId: string): Promise<void> => {
+    const res = await fetch(
+      `${normalize(baseUrl)}/api/tanks/${encodeURIComponent(tankId)}/refresh`,
+      { method: 'POST' },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  },
 };

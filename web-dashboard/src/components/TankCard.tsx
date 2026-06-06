@@ -1,10 +1,11 @@
 // A single tank: gauge, key metrics, status, and expandable history.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TankState } from '../api/types';
 import { GaugeRing } from './GaugeRing';
 import { StatusBadge } from './StatusBadge';
 import { LastUpdated } from './LastUpdated';
 import { HistoryChart } from './HistoryChart';
+import { useRefreshTank } from '../api/hooks';
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -27,6 +28,23 @@ export function TankCard({ tank }: { tank: TankState }) {
   const dist = latest && active ? latest.adjustedDistanceCm : null;
   const volume = latest && active ? latest.volumeLiters : null;
 
+  // "Refresh now" → ask the node to read immediately. The result arrives via
+  // WebSocket; we show a pending state until lastSeen advances (or timeout).
+  const refresh = useRefreshTank();
+  const [pinging, setPinging] = useState(false);
+  const lastSeenRef = useRef(tank.lastSeen);
+  useEffect(() => {
+    if (tank.lastSeen !== lastSeenRef.current) {
+      lastSeenRef.current = tank.lastSeen;
+      setPinging(false);
+    }
+  }, [tank.lastSeen]);
+  const onRefreshNow = () => {
+    setPinging(true);
+    refresh.mutate(config.id, { onError: () => setPinging(false) });
+    setTimeout(() => setPinging(false), 10000); // safety reset
+  };
+
   return (
     <div className="card" style={{ padding: 18 }}>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
@@ -40,7 +58,7 @@ export function TankCard({ tank }: { tank: TankState }) {
           style={{
             flex: 1,
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
             gap: 14,
             alignContent: 'center',
           }}
@@ -73,13 +91,28 @@ export function TankCard({ tank }: { tank: TankState }) {
             <span className="muted"> · {latest.rssi} dBm</span>
           )}
         </span>
-        <button
-          className="pill"
-          style={{ border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer' }}
-          onClick={() => setOpen((o) => !o)}
-        >
-          {open ? 'Hide history ▲' : 'Show history ▼'}
-        </button>
+        <span className="row" style={{ gap: 8 }}>
+          <button
+            className="pill"
+            style={{
+              border: '1px solid var(--border)',
+              color: pinging ? 'var(--accent)' : 'var(--text-dim)',
+              cursor: pinging ? 'default' : 'pointer',
+            }}
+            onClick={onRefreshNow}
+            disabled={pinging}
+            title="Ask the node to take a fresh reading now"
+          >
+            {pinging ? '⟳ Refreshing…' : '⟳ Refresh now'}
+          </button>
+          <button
+            className="pill"
+            style={{ border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer' }}
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? 'Hide history ▲' : 'Show history ▼'}
+          </button>
+        </span>
       </div>
 
       {open && (
