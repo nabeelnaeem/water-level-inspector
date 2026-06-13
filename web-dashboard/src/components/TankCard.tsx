@@ -5,6 +5,7 @@ import { GaugeRing } from './GaugeRing';
 import { StatusBadge } from './StatusBadge';
 import { LastUpdated } from './LastUpdated';
 import { HistoryChart } from './HistoryChart';
+import { FillPanel } from './FillPanel';
 import { useRefreshTank } from '../api/hooks';
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -83,6 +84,8 @@ export function TankCard({ tank }: { tank: TankState }) {
           ✕ Node offline — no readings recently.
         </div>
       )}
+
+      <FillPanel tank={tank} />
 
       <div className="row" style={{ justifyContent: 'space-between', marginTop: 14 }}>
         <span style={{ fontSize: 12 }}>

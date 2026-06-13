@@ -45,6 +45,42 @@ export interface HistoryResponse {
   points: HistoryPoint[];
 }
 
+// ---- fill tracking (mirror of backend/src/types.ts) ----
+
+export interface FillSession {
+  id: number;
+  tankId: string;
+  startedAt: string;
+  endedAt: string | null;
+  startPercentage: number | null;
+  startWaterHeightCm: number | null;
+}
+
+export type FillStatus = 'no_session' | 'collecting' | 'filling' | 'stalled' | 'full';
+
+export interface FillEstimate {
+  status: FillStatus;
+  session: FillSession | null;
+  samples: number;
+  currentPercentage: number | null;
+  startPercentage: number | null;
+  pctPerMin: number | null;
+  cmPerMin: number | null;
+  etaMinutes: number | null;
+  etaAt: string | null;
+}
+
+export interface RateResult {
+  windowMinutes: number;
+  samples: number;
+  spanMinutes: number | null;
+  deltaCm: number | null;
+  deltaPercentage: number | null;
+  cmPerMin: number | null;
+  firstTs: string | null;
+  lastTs: string | null;
+}
+
 // WebSocket messages (backend -> client)
 export type WsMessage =
   | { type: 'snapshot'; tanks: TankState[] }

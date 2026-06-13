@@ -1,5 +1,5 @@
 // REST client + base-URL resolution.
-import type { HistoryResponse, TankState } from './types';
+import type { FillEstimate, HistoryResponse, RateResult, TankState } from './types';
 
 /**
  * Resolve the backend base URL.
@@ -32,6 +32,30 @@ export const api = {
 
   history: (id: string, minutes: number) =>
     getJson<HistoryResponse>(`/api/tanks/${encodeURIComponent(id)}/history?minutes=${minutes}`),
+
+  // Fill-to-100% tracking.
+  fillEstimate: (id: string) =>
+    getJson<FillEstimate>(`/api/tanks/${encodeURIComponent(id)}/fill`),
+
+  startFill: async (id: string): Promise<FillEstimate> => {
+    const res = await fetch(`${apiBase()}/api/tanks/${encodeURIComponent(id)}/fill/start`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(`Start fill failed: HTTP ${res.status}`);
+    return res.json();
+  },
+
+  stopFill: async (id: string): Promise<FillEstimate> => {
+    const res = await fetch(`${apiBase()}/api/tanks/${encodeURIComponent(id)}/fill/stop`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(`Stop fill failed: HTTP ${res.status}`);
+    return res.json();
+  },
+
+  // Net level change over a trailing window (minutes).
+  rate: (id: string, minutes: number) =>
+    getJson<RateResult>(`/api/tanks/${encodeURIComponent(id)}/rate?minutes=${minutes}`),
 
   // Ask the node to take a fresh reading now (served within the node's
   // command-poll interval, ~3s).

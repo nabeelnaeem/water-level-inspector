@@ -47,6 +47,41 @@ export function useRefreshTank() {
   return useMutation({ mutationFn: api.refreshTank });
 }
 
+/** Live fill-to-100% estimate for a tank's active session. */
+export function useFillEstimate(tankId: string) {
+  return useQuery({
+    queryKey: ['fill', tankId],
+    queryFn: () => api.fillEstimate(tankId),
+    // Recompute often while filling; the WS reading handler also invalidates.
+    refetchInterval: 10_000,
+  });
+}
+
+export function useStartFill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.startFill,
+    onSuccess: (data, tankId) => qc.setQueryData(['fill', tankId], data),
+  });
+}
+
+export function useStopFill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.stopFill,
+    onSuccess: (data, tankId) => qc.setQueryData(['fill', tankId], data),
+  });
+}
+
+/** Net level change over a trailing window (the rise meter). */
+export function useRate(tankId: string, minutes: number) {
+  return useQuery({
+    queryKey: ['rate', tankId, minutes],
+    queryFn: () => api.rate(tankId, minutes),
+    refetchInterval: 10_000,
+  });
+}
+
 /**
  * Maintain a single WebSocket connection that patches the React Query cache
  * in place as readings arrive. Auto-reconnects with backoff.
@@ -89,8 +124,10 @@ export function useLiveUpdates(onConnected?: (connected: boolean) => void) {
             next[idx] = msg.state;
             return next;
           });
-          // Let open history charts pick up the new point.
+          // Let open history charts + fill/rate readouts pick up the new point.
           qc.invalidateQueries({ queryKey: ['history', msg.reading.tankId] });
+          qc.invalidateQueries({ queryKey: ['fill', msg.reading.tankId] });
+          qc.invalidateQueries({ queryKey: ['rate', msg.reading.tankId] });
         }
       };
 

@@ -59,3 +59,73 @@ export interface IngestPayload {
   fw?: string;
   uptimeS?: number;
 }
+
+// ---- fill tracking -------------------------------------------------------
+
+/**
+ * A "I'm filling this tank now" tracking session. Started/stopped from the
+ * dashboard button. The fill ETA is computed only from readings recorded
+ * between `startedAt` and now — never from previous sessions/days.
+ */
+export interface FillSession {
+  id: number;
+  tankId: string;
+  /** ISO time the user pressed "Start tracking". */
+  startedAt: string;
+  /** ISO time the session was stopped, or null while active. */
+  endedAt: string | null;
+  /** Fill % at the moment tracking started (null if unknown). */
+  startPercentage: number | null;
+  /** Water height (cm) at the moment tracking started (null if unknown). */
+  startWaterHeightCm: number | null;
+}
+
+export type FillStatus = 'no_session' | 'collecting' | 'filling' | 'stalled' | 'full';
+
+/** Live projection of when the tank reaches 100%, for the active session. */
+export interface FillEstimate {
+  /**
+   * no_session — nothing being tracked.
+   * collecting — tracking, but <2 readings so far.
+   * filling    — rising; etaMinutes/etaAt are populated.
+   * stalled    — not rising; can't project an ETA.
+   * full       — already at/above 100%.
+   */
+  status: FillStatus;
+  session: FillSession | null;
+  /** Number of readings used since the session started. */
+  samples: number;
+  /** Most recent fill % since the session started. */
+  currentPercentage: number | null;
+  /** Fill % when tracking started. */
+  startPercentage: number | null;
+  /** Fill speed from a least-squares fit (% per minute). */
+  pctPerMin: number | null;
+  /** Fill speed in cm per minute. */
+  cmPerMin: number | null;
+  /** Minutes until 100%, or null when not meaningfully rising. */
+  etaMinutes: number | null;
+  /** Absolute ISO time the tank is projected to hit 100%. */
+  etaAt: string | null;
+}
+
+/**
+ * Net level change over a trailing window — powers the "rise meter" and the
+ * stall alarm. `deltaCm` > 0 means the level rose over the window.
+ */
+export interface RateResult {
+  /** Requested window in minutes. */
+  windowMinutes: number;
+  /** Fault-free samples found in the window. */
+  samples: number;
+  /** Time actually spanned by those samples (<= windowMinutes), or null. */
+  spanMinutes: number | null;
+  /** Change in water height (cm) across the window. */
+  deltaCm: number | null;
+  /** Change in fill percentage across the window. */
+  deltaPercentage: number | null;
+  /** Average rise speed (cm per minute), or null. */
+  cmPerMin: number | null;
+  firstTs: string | null;
+  lastTs: string | null;
+}

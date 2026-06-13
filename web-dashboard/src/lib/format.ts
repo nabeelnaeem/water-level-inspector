@@ -14,6 +14,19 @@ export function relativeTime(iso: string | null): string {
   return `${Math.round(h / 24)}d ago`;
 }
 
+/** Compact human duration from minutes, e.g. 83 -> "1h 23m", 4.5 -> "4m 30s". */
+export function durationFromMinutes(mins: number | null): string {
+  if (mins == null || !Number.isFinite(mins) || mins < 0) return '—';
+  if (mins < 1) return `${Math.round(mins * 60)}s`;
+  const totalSec = Math.round(mins * 60);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  if (m >= 10) return `${m}m`;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
 export function clockTime(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleTimeString([], {

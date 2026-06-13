@@ -8,6 +8,10 @@ import {
   upsertTank,
   deleteTank,
   history,
+  fillEstimate,
+  startFillSession,
+  stopFillSession,
+  rateOverWindow,
 } from '../repository.js';
 import { requestRefresh, consumeRefresh } from '../commands.js';
 
@@ -59,6 +63,40 @@ tanksRouter.post('/:id/refresh', (req, res) => {
 // whether a manual refresh was requested. Kept tiny on purpose.
 tanksRouter.get('/:id/command', (req, res) => {
   res.json({ refresh: consumeRefresh(req.params.id) });
+});
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+// GET /api/tanks/:id/fill — current fill-to-100% estimate (active session only).
+tanksRouter.get('/:id/fill', (req, res) => {
+  const tank = getTank(req.params.id);
+  if (!tank) return res.status(404).json({ error: 'tank_not_found' });
+  res.json(fillEstimate(tank.id));
+});
+
+// POST /api/tanks/:id/fill/start — begin tracking the current fill.
+tanksRouter.post('/:id/fill/start', (req, res) => {
+  const tank = getTank(req.params.id);
+  if (!tank) return res.status(404).json({ error: 'tank_not_found' });
+  startFillSession(tank.id);
+  res.json(fillEstimate(tank.id));
+});
+
+// POST /api/tanks/:id/fill/stop — stop tracking.
+tanksRouter.post('/:id/fill/stop', (req, res) => {
+  const tank = getTank(req.params.id);
+  if (!tank) return res.status(404).json({ error: 'tank_not_found' });
+  stopFillSession(tank.id);
+  res.json(fillEstimate(tank.id));
+});
+
+// GET /api/tanks/:id/rate?minutes=5 — net level change over a trailing window
+// (1 minute to 3 hours). Powers the rise meter and the stall alarm.
+tanksRouter.get('/:id/rate', (req, res) => {
+  const tank = getTank(req.params.id);
+  if (!tank) return res.status(404).json({ error: 'tank_not_found' });
+  const minutes = clamp(Number(req.query.minutes) || 5, 1, 180);
+  res.json(rateOverWindow(tank.id, minutes));
 });
 
 const tankSchema = z.object({

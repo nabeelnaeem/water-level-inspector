@@ -41,6 +41,19 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_readings_tank_ts ON readings (tank_id, ts);
+
+  CREATE TABLE IF NOT EXISTS fill_sessions (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    tank_id               TEXT NOT NULL REFERENCES tanks(id) ON DELETE CASCADE,
+    started_at            TEXT NOT NULL,
+    ended_at              TEXT,
+    start_percentage      REAL,
+    start_water_height_cm REAL
+  );
+
+  -- One partial index keeps "find the open session for this tank" fast.
+  CREATE INDEX IF NOT EXISTS idx_fill_sessions_open
+    ON fill_sessions (tank_id) WHERE ended_at IS NULL;
 `);
 
 /** Prune readings older than the retention window. No-op when retention = 0. */

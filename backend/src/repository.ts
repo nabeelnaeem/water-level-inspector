@@ -2,8 +2,12 @@
 import { db } from './db.js';
 import { config } from './config.js';
 import { computeLevel } from './levelMath.js';
+import { computeFillEstimate, computeRate, type Sample } from './fillStats.js';
 import type {
+  FillEstimate,
+  FillSession,
   IngestPayload,
+  RateResult,
   TankConfig,
   TankReading,
   TankState,
@@ -192,6 +196,110 @@ export function history(tankId: string, minutes: number, maxPoints = 3000): Hist
     });
   }
   return out;
+}
+
+// ---- fill tracking -------------------------------------------------------
+
+interface FillSessionRow {
+  id: number;
+  tank_id: string;
+  started_at: string;
+  ended_at: string | null;
+  start_percentage: number | null;
+  start_water_height_cm: number | null;
+}
+
+function toFillSession(r: FillSessionRow): FillSession {
+  return {
+    id: r.id,
+    tankId: r.tank_id,
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
+    startPercentage: r.start_percentage,
+    startWaterHeightCm: r.start_water_height_cm,
+  };
+}
+
+function getFillSessionById(id: number | bigint): FillSession | null {
+  const row = db.prepare('SELECT * FROM fill_sessions WHERE id = ?').get(id) as
+    | FillSessionRow
+    | undefined;
+  return row ? toFillSession(row) : null;
+}
+
+/** The currently-open (not yet stopped) fill session for a tank, if any. */
+export function getActiveFillSession(tankId: string): FillSession | null {
+  const row = db
+    .prepare(
+      'SELECT * FROM fill_sessions WHERE tank_id = ? AND ended_at IS NULL ORDER BY started_at DESC, id DESC LIMIT 1',
+    )
+    .get(tankId) as FillSessionRow | undefined;
+  return row ? toFillSession(row) : null;
+}
+
+/**
+ * Begin tracking a fill. Closes any session already open for this tank so
+ * there is at most one active session, then snapshots the current level as
+ * the baseline.
+ */
+export function startFillSession(tankId: string): FillSession {
+  const now = new Date().toISOString();
+  db.prepare('UPDATE fill_sessions SET ended_at = ? WHERE tank_id = ? AND ended_at IS NULL').run(
+    now,
+    tankId,
+  );
+
+  const latest = latestReading(tankId);
+  const usable = latest && latest.rawDistanceCm >= 0;
+  const info = db
+    .prepare(
+      `INSERT INTO fill_sessions (tank_id, started_at, ended_at, start_percentage, start_water_height_cm)
+       VALUES (?, ?, NULL, ?, ?)`,
+    )
+    .run(tankId, now, usable ? latest!.percentage : null, usable ? latest!.waterHeightCm : null);
+
+  return getFillSessionById(info.lastInsertRowid)!;
+}
+
+/** Stop the active fill session for a tank. Returns it, or null if none open. */
+export function stopFillSession(tankId: string): FillSession | null {
+  const active = getActiveFillSession(tankId);
+  if (!active) return null;
+  db.prepare('UPDATE fill_sessions SET ended_at = ? WHERE id = ?').run(
+    new Date().toISOString(),
+    active.id,
+  );
+  return getFillSessionById(active.id);
+}
+
+/** Fault-free samples for a tank with `ts >= sinceIso`, oldest first. */
+function samplesSince(tankId: string, sinceIso: string): Sample[] {
+  const rows = db
+    .prepare(
+      `SELECT water_height_cm, percentage, ts
+         FROM readings
+        WHERE tank_id = ? AND ts >= ? AND fault = 0
+        ORDER BY ts ASC`,
+    )
+    .all(tankId, sinceIso) as Pick<ReadingRow, 'water_height_cm' | 'percentage' | 'ts'>[];
+  return rows.map((r) => ({
+    tMs: new Date(r.ts).getTime(),
+    pct: r.percentage,
+    cm: r.water_height_cm,
+  }));
+}
+
+/** Live fill-to-100% estimate for the tank's active session (if any). */
+export function fillEstimate(tankId: string): FillEstimate {
+  const session = getActiveFillSession(tankId);
+  if (!session) return computeFillEstimate(null, [], Date.now());
+  return computeFillEstimate(session, samplesSince(tankId, session.startedAt), Date.now());
+}
+
+/** Net level change over the last `minutes` (for the rise meter + alarm). */
+export function rateOverWindow(tankId: string, minutes: number): RateResult {
+  const cutoff = new Date(Date.now() - minutes * 60_000).toISOString();
+  return computeRate(samplesSince(tankId, cutoff), minutes);
 }
 
 // ---- derived state -------------------------------------------------------
