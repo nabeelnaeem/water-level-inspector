@@ -20,6 +20,8 @@ const RISE_WINDOWS = [
 const STALL_THRESHOLD_CM = 0.5;
 // How often to re-ring while a stall persists.
 const ALARM_REPEAT_MS = 20_000;
+// "Tank full" alarm rings near-continuously until the user acknowledges it.
+const FULL_ALARM_REPEAT_MS = 2_500;
 
 function fmtSigned(v: number | null, unit: string, dp = 1): string {
   if (v == null) return '—';
@@ -46,11 +48,37 @@ export function FillPanel({ tank }: { tank: TankState }) {
   // ---- Feature 3: stall alarm ----
   const [alarmOn, setAlarmOn] = useState(false);
 
+  // ---- "Tank full" alarm + auto-stop on 100% ----
+  // Rings continuously once the tank fills, independent of the stall-alarm
+  // toggle, until the user acknowledges it with the button.
+  const [fullAlarmActive, setFullAlarmActive] = useState(false);
+  const sessionId = est?.session?.id ?? null;
+
+  // When the active session reaches 100%, auto-stop tracking and raise the full
+  // alarm. Runs once per session — stopping clears the session so it can't loop.
+  useEffect(() => {
+    if (est?.status === 'full' && sessionId != null && !stopFill.isPending) {
+      setFullAlarmActive(true);
+      stopFill.mutate(tankId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [est?.status, sessionId]);
+
+  // Ring continuously while the full alarm is active.
+  useEffect(() => {
+    if (!fullAlarmActive) return;
+    ringAlarm();
+    const id = setInterval(ringAlarm, FULL_ALARM_REPEAT_MS);
+    return () => clearInterval(id);
+  }, [fullAlarmActive]);
+
   // Only flag a stall once the samples actually cover most of the window, so we
-  // don't false-alarm right after enabling it or changing the interval.
+  // don't false-alarm right after enabling it or changing the interval. The
+  // full alarm takes precedence — a full tank plateaus and would look "stalled".
   const haveCoverage =
     !!r && r.samples >= 2 && r.spanMinutes != null && r.spanMinutes >= Math.max(1, windowMin * 0.6);
-  const stalled = alarmOn && haveCoverage && (r!.deltaCm ?? 0) < STALL_THRESHOLD_CM;
+  const stalled =
+    alarmOn && !fullAlarmActive && haveCoverage && (r!.deltaCm ?? 0) < STALL_THRESHOLD_CM;
 
   // Ring on entering a stall, then repeat until it clears or the alarm is off.
   useEffect(() => {
@@ -65,11 +93,41 @@ export function FillPanel({ tank }: { tank: TankState }) {
     setAlarmOn((on) => !on);
   };
 
+  const handleStart = () => {
+    unlockAudio(); // unlock audio now so the full alarm can ring later
+    setFullAlarmActive(false); // clear any prior acknowledgement state
+    startFill.mutate(tankId);
+  };
+
   const rising = (r?.deltaCm ?? 0) > 0;
   const riseColor = !r || r.deltaCm == null ? 'var(--text-faint)' : rising ? 'var(--accent)' : '#ff8c00';
 
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 14, display: 'grid', gap: 14 }}>
+      {/* ---------- Tank-full alarm (rings until acknowledged) ---------- */}
+      {fullAlarmActive && (
+        <div
+          className="banner"
+          style={{
+            marginBottom: 0,
+            justifyContent: 'space-between',
+            gap: 12,
+            color: 'var(--accent)',
+            borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--border))',
+            background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+          }}
+        >
+          <span style={{ fontWeight: 700 }}>🔔 Tank full (100%) — fill complete. Tracking stopped.</span>
+          <button
+            className="btn"
+            style={{ padding: '6px 12px', flexShrink: 0 }}
+            onClick={() => setFullAlarmActive(false)}
+          >
+            🔕 Stop alarm
+          </button>
+        </div>
+      )}
+
       {/* ---------- Fill-to-100% tracker ---------- */}
       <div className="row" style={{ justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 200 }}>
@@ -120,7 +178,7 @@ export function FillPanel({ tank }: { tank: TankState }) {
           <button
             className="btn primary"
             style={{ padding: '8px 14px' }}
-            onClick={() => startFill.mutate(tankId)}
+            onClick={handleStart}
             disabled={startFill.isPending || !online}
             title={online ? 'Start tracking the fill' : 'Tank offline'}
           >
